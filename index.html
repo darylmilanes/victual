@@ -13,7 +13,7 @@
     
     <!-- Respect iPhone Safe Areas -->
     <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     
     <!-- React & Firebase -->
     <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
@@ -26,18 +26,28 @@
 
     <!-- iOS System Fonts & Safe Area Setup -->
     <style>
+        /* CRITICAL: Lock the body to prevent whole-page scrolling on Android */
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
             background-color: #F2F2F7; /* iOS System Gray 6 */
-            -webkit-tap-highlight-color: transparent;
+            position: fixed; 
+            inset: 0;
+            overflow: hidden;
+            width: 100%;
+            height: 100dvh; /* Dynamic viewport height for mobile browsers */
         }
         
-        /* Safe Area Utilities for Notch and Home Bar */
+        /* Safe Area Utilities */
         .pt-safe { padding-top: env(safe-area-inset-top); }
         .pb-safe { padding-bottom: env(safe-area-inset-bottom); }
-        .mb-safe { margin-bottom: env(safe-area-inset-bottom); }
         
-        /* Hide scrollbar for sleek look but keep functionality */
+        /* Custom Padding that combines Safe Area + Header Height + Extra Spacing */
+        /* Changed 80px to 110px to create distance between header and list items */
+        .pt-header-offset {
+            padding-top: calc(env(safe-area-inset-top) + 110px); 
+        }
+        
+        /* Hide scrollbar */
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
@@ -75,9 +85,9 @@
         window.dbMethods = { collection, addDoc, onSnapshot, doc, updateDoc, deleteDoc, runTransaction };
     </script>
 </head>
-<body class="text-gray-900 h-screen w-screen overflow-hidden flex flex-col">
+<body class="text-gray-900">
 
-    <div id="root" class="flex-1 flex flex-col h-full w-full"></div>
+    <div id="root" class="h-full w-full"></div>
 
     <script type="text/babel">
         const { useState, useEffect, useMemo } = React;
@@ -86,11 +96,12 @@
 
         // --- REUSABLE COMPONENTS ---
 
-        // Fixed Header Component (Absolute Positioned)
+        // Fixed Header: Absolute positioned to sit ON TOP of the scroll view
+        // Uses pt-safe to respect notch
         const FixedHeader = ({ title, onAdd, children, rightAction }) => (
-            <div className="absolute top-0 left-0 right-0 z-20 bg-[#F2F2F7]/95 backdrop-blur-md pt-safe border-b border-gray-200/50 shadow-sm transition-all">
-                <div className="px-5 pt-6 pb-4 flex justify-between items-end">
-                    <h1 className="text-3xl font-bold tracking-tight">{title}</h1>
+            <div className="absolute top-0 left-0 right-0 z-30 bg-[#F2F2F7]/90 backdrop-blur-md pt-safe border-b border-gray-200/50 shadow-sm">
+                <div className="px-5 pt-4 pb-4 flex justify-between items-end h-[80px]">
+                    <h1 className="text-3xl font-bold tracking-tight leading-none">{title}</h1>
                     <div className="flex gap-3 items-center">
                         {children}
                         {rightAction}
@@ -146,7 +157,7 @@
             ];
 
             return (
-                <div className="bg-white border-t border-gray-200 pb-safe fixed bottom-0 w-full z-50">
+                <div className="absolute bottom-0 left-0 right-0 bg-white border-t border-gray-200 pb-safe z-40">
                     <div className="flex justify-around items-center h-16">
                         {tabs.map(tab => (
                             <button 
@@ -297,10 +308,11 @@
                 };
 
                 return (
-                    <div className="h-full w-full relative bg-[#F2F2F7]">
+                    <div className="h-full w-full relative">
                         <FixedHeader title="Supplies" onAdd={openAdd} />
 
-                        <div className="h-full overflow-y-auto w-full px-5 pt-32 pb-32 no-scrollbar">
+                        {/* Scrollable Container with Top Padding Offset */}
+                        <div className="h-full overflow-y-auto w-full px-5 pt-header-offset pb-32 no-scrollbar">
                             <div className="flex flex-col gap-3">
                                 {inventory.length === 0 && !loading && <p className="text-gray-400 text-center mt-10">No supplies yet.</p>}
                                 {inventory.sort((a,b) => a.name.localeCompare(b.name)).map(item => (
@@ -441,10 +453,10 @@
                 };
 
                 return (
-                    <div className="h-full w-full relative bg-[#F2F2F7]">
+                    <div className="h-full w-full relative">
                         <FixedHeader title="Menus" onAdd={openAdd} />
 
-                        <div className="h-full overflow-y-auto w-full px-5 pt-32 pb-32 no-scrollbar">
+                        <div className="h-full overflow-y-auto w-full px-5 pt-header-offset pb-32 no-scrollbar">
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                 {menus.map(menu => (
                                     <div key={menu.id} className="bg-white p-5 rounded-2xl shadow-sm relative group">
@@ -663,7 +675,7 @@
                 }, [menus]);
 
                 return (
-                    <div className="h-full w-full relative bg-[#F2F2F7]">
+                    <div className="h-full w-full relative">
                         <FixedHeader 
                             title="Cook" 
                             rightAction={
@@ -673,7 +685,7 @@
                             } 
                         />
 
-                        <div className="h-full overflow-y-auto w-full px-5 pt-32 pb-32 no-scrollbar">
+                        <div className="h-full overflow-y-auto w-full px-5 pt-header-offset pb-32 no-scrollbar">
                             <div className="flex flex-col gap-4">
                                 {sortedMenus.map(menu => {
                                     let canCook = true;
