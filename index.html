@@ -10,8 +10,10 @@
     <link rel="apple-touch-icon" href="icon-192.png">
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#F2F2F7">
+    
+    <!-- Changed to 'default' to respect iPhone Safe Areas automatically -->
     <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
     
     <!-- React & Firebase -->
     <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
@@ -84,6 +86,24 @@
 
         // --- REUSABLE COMPONENTS ---
 
+        // Sticky Header Component (Fixes overlap issues)
+        const StickyHeader = ({ title, onAdd, children, rightAction }) => (
+            <div className="sticky top-0 z-40 bg-[#F2F2F7]/95 backdrop-blur-md pt-6 px-5 pb-4 border-b border-gray-200/50 transition-all">
+                <div className="flex justify-between items-end">
+                    <h1 className="text-3xl font-bold tracking-tight">{title}</h1>
+                    <div className="flex gap-3">
+                        {children}
+                        {rightAction}
+                        {onAdd && (
+                            <button onClick={onAdd} className="bg-blue-500 text-white rounded-full p-2 shadow-lg active-scale">
+                                <i data-lucide="plus" className="w-6 h-6"></i>
+                            </button>
+                        )}
+                    </div>
+                </div>
+            </div>
+        );
+
         // Generic Modal Component
         const Modal = ({ title, children, onCancel, onConfirm, confirmText = "Confirm", confirmColor = "bg-blue-500", showCancel = true, isLoading = false, hideButtons = false }) => (
             <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[70] flex items-center justify-center p-4 animate-fade-in">
@@ -145,7 +165,6 @@
 
         // 2. Inventory Item Card
         const InventoryCard = ({ item, onEdit, onDelete }) => {
-            // Determine status color
             const isLow = item.qty <= 1 && item.trackQuantity;
             const canDelete = !item.trackQuantity || item.qty === 0;
             
@@ -244,7 +263,6 @@
                     
                     const normalizedName = newItem.name.trim().toUpperCase();
 
-                    // Check duplicate
                     const duplicate = inventory.find(i => i.name === normalizedName && i.id !== editingId);
                     if (duplicate) {
                         setErrorMsg('This item already exists.');
@@ -279,17 +297,11 @@
                 };
 
                 return (
-                    <div className="p-5 pt-safe pb-32">
-                        <header className="flex justify-between items-end mb-6">
-                            <h1 className="text-3xl font-bold tracking-tight">Supplies</h1>
-                            <button onClick={openAdd} className="bg-blue-500 text-white rounded-full p-2 shadow-lg active-scale">
-                                <i data-lucide="plus" className="w-6 h-6"></i>
-                            </button>
-                        </header>
+                    <div className="pb-32">
+                        <StickyHeader title="Supplies" onAdd={openAdd} />
 
-                        <div className="flex flex-col gap-3">
+                        <div className="flex flex-col gap-3 px-5 pt-3">
                             {inventory.length === 0 && !loading && <p className="text-gray-400 text-center mt-10">No supplies yet.</p>}
-                            {/* Sort alphabetically */}
                             {inventory.sort((a,b) => a.name.localeCompare(b.name)).map(item => (
                                 <InventoryCard 
                                     key={item.id} 
@@ -403,7 +415,6 @@
                 const saveMenu = async () => {
                     if (!menuName) return;
                     
-                    // Filter out zero quantity ingredients
                     const cleanIngredients = selectedIngredients.filter(i => !i.trackQuantity || (i.reqQty && i.reqQty > 0));
 
                     const data = {
@@ -428,15 +439,10 @@
                 };
 
                 return (
-                    <div className="p-5 pt-safe pb-32">
-                        <header className="flex justify-between items-end mb-6">
-                            <h1 className="text-3xl font-bold tracking-tight">Menus</h1>
-                            <button onClick={openAdd} className="bg-blue-500 text-white rounded-full p-2 shadow-lg active-scale">
-                                <i data-lucide="plus" className="w-6 h-6"></i>
-                            </button>
-                        </header>
+                    <div className="pb-32">
+                        <StickyHeader title="Menus" onAdd={openAdd} />
 
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 px-5 pt-3">
                             {menus.map(menu => (
                                 <div key={menu.id} className="bg-white p-5 rounded-2xl shadow-sm relative group">
                                     <div className="absolute top-4 right-4 flex gap-2">
@@ -492,7 +498,6 @@
                                     <div className="flex flex-col gap-2">
                                         {inventory.sort((a,b) => a.name.localeCompare(b.name)).map(item => {
                                             const isSelected = selectedIngredients.find(i => i.id === item.id);
-                                            // Check if overcommitted
                                             const isOvercommitted = isSelected && item.trackQuantity && isSelected.reqQty > item.qty;
 
                                             return (
@@ -538,7 +543,7 @@
                 const [successMessage, setSuccessMessage] = useState(null);
                 const [errorMessage, setErrorMessage] = useState(null);
                 const [isProcessing, setIsProcessing] = useState(false);
-                const [showHistory, setShowHistory] = useState(false); // History Modal State
+                const [showHistory, setShowHistory] = useState(false); 
                 
                 const toggleHistory = () => {
                     setShowHistory(!showHistory);
@@ -556,16 +561,10 @@
 
                     try {
                         await runTransaction(db, async (transaction) => {
-                            // Setup refs
                             const menuRef = doc(db, "menus", menu.id); 
-                            
-                            // Phase 1: Reads (Read EVERYTHING before writes)
                             const reads = [];
-                            
-                            // 1a. Read Menu (REQUIRED for transaction update in client SDK)
                             reads.push({ ref: menuRef, type: 'menu' });
 
-                            // 1b. Read Ingredients
                             for (let ing of (menu.ingredients || [])) {
                                 if (ing.trackQuantity) {
                                     const itemRef = doc(db, "inventory", ing.id);
@@ -573,7 +572,6 @@
                                 }
                             }
 
-                            // 2. Perform all reads
                             const snapshots = [];
                             for (let readItem of reads) {
                                 const snap = await transaction.get(readItem.ref);
@@ -582,15 +580,12 @@
 
                             const updates = [];
 
-                            // 3. Validation Logic (Pure logic)
                             for (let item of snapshots) {
-                                // Check Menu existence
                                 if (item.type === 'menu') {
                                     if (!item.snap.exists()) throw new Error("Menu no longer exists.");
                                     continue; 
                                 }
 
-                                // Check Inventory
                                 if (item.type === 'inventory') {
                                     if (!item.snap.exists()) {
                                         throw new Error(`Item "${item.ing.name}" no longer exists in inventory.`);
@@ -607,14 +602,10 @@
                                 }
                             }
 
-                            // Phase 2: Writes (Only writes allowed now)
-                            
-                            // 1. Update Inventory
                             for (let update of updates) {
                                 transaction.update(update.ref, { qty: update.newQty });
                             }
                             
-                            // 2. Update Menu
                             transaction.update(menuRef, { lastPrepared: new Date().toISOString() });
                         });
                         
@@ -629,7 +620,6 @@
                     }
                 };
 
-                // Helper: Get weekly status
                 const getWeeklyStatus = (lastPreparedStr) => {
                     if (!lastPreparedStr) return { status: 'pending', label: 'Not cooked this week', color: 'text-gray-400', icon: 'circle' };
                     
@@ -637,13 +627,11 @@
                     const now = new Date();
                     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
                     
-                    // Get Sunday of current week
                     const sun = new Date(today);
                     sun.setDate(today.getDate() - today.getDay()); // 0 is Sunday
                     sun.setHours(0,0,0,0);
                     
                     if (last >= sun) {
-                        // It's this week
                         if (last.toDateString() === today.toDateString()) {
                             return { status: 'today', label: 'Prepared Today', color: 'text-blue-500', icon: 'check-circle-2' };
                         }
@@ -654,50 +642,44 @@
                     return { status: 'pending', label: 'Not cooked this week', color: 'text-gray-400', icon: 'circle' };
                 };
 
-                // SORTING LOGIC: Prepared TODAY goes to bottom
                 const sortedMenus = useMemo(() => {
                     return [...menus].sort((a, b) => {
                         const dateA = a.lastPrepared ? new Date(a.lastPrepared) : new Date(0);
                         const dateB = b.lastPrepared ? new Date(b.lastPrepared) : new Date(0);
                         
-                        // Check if prepared *today*
                         const today = new Date().toDateString();
                         const aIsToday = dateA.toDateString() === today;
                         const bIsToday = dateB.toDateString() === today;
 
-                        // If A is today and B is not, A goes to bottom (1)
                         if (aIsToday && !bIsToday) return 1;
-                        // If B is today and A is not, B goes to bottom (-1)
                         if (!aIsToday && bIsToday) return -1;
                         
-                        // Secondary sort: Alphabetical
                         return a.name.localeCompare(b.name);
                     });
                 }, [menus]);
 
                 return (
-                    <div className="p-5 pt-safe pb-32">
-                         <header className="flex justify-between items-end mb-6">
-                            <h1 className="text-3xl font-bold tracking-tight">Cook</h1>
-                            <button onClick={toggleHistory} className="p-2 text-gray-400 hover:text-blue-500 active-scale">
-                                <i data-lucide="clipboard-list" className="w-6 h-6"></i>
-                            </button>
-                        </header>
+                    <div className="pb-32">
+                        <StickyHeader 
+                            title="Cook" 
+                            rightAction={
+                                <button onClick={toggleHistory} className="p-2 text-gray-400 hover:text-blue-500 active-scale">
+                                    <i data-lucide="clipboard-list" className="w-6 h-6"></i>
+                                </button>
+                            } 
+                        />
 
-                        <div className="flex flex-col gap-4">
+                        <div className="flex flex-col gap-4 px-5 pt-3">
                             {sortedMenus.map(menu => {
-                                // Calculate Status
                                 let canCook = true;
                                 let missingCount = 0;
                                 
-                                // Last prepared Check
                                 const lastCooked = menu.lastPrepared ? new Date(menu.lastPrepared) : null;
                                 const isToday = lastCooked && lastCooked.toDateString() === new Date().toDateString();
                                 
                                 menu.ingredients.forEach(ing => {
                                     if (ing.trackQuantity) {
                                         const stock = inventory.find(i => i.id === ing.id);
-                                        // Ensure numeric comparison
                                         const stockQty = stock ? Number(stock.qty) : 0;
                                         const reqQty = Number(ing.reqQty);
                                         
@@ -713,7 +695,6 @@
                                         <div className="flex justify-between items-start mb-4">
                                             <div>
                                                 <h3 className="font-bold text-xl">{menu.name}</h3>
-                                                {/* Prepared Indicator */}
                                                 {lastCooked && (
                                                     <div className="flex items-center gap-1 mt-1 animate-fade-in">
                                                         {isToday ? (
