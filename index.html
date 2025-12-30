@@ -1,0 +1,861 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Victual</title>
+    
+    <!-- PWA Configuration -->
+    <link rel="icon" type="image/png" href="favicon.png">
+    <link rel="apple-touch-icon" href="icon-192.png">
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#F2F2F7">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    
+    <!-- React & Firebase -->
+    <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Lucide Icons (Clean, modern icons) -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <!-- iOS System Fonts & Safe Area Setup -->
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: #F2F2F7; /* iOS System Gray 6 */
+            -webkit-tap-highlight-color: transparent;
+        }
+        
+        /* Safe Area Utilities for Notch and Home Bar */
+        .pt-safe { padding-top: env(safe-area-inset-top); }
+        .pb-safe { padding-bottom: env(safe-area-inset-bottom); }
+        .mb-safe { margin-bottom: env(safe-area-inset-bottom); }
+        
+        /* Hide scrollbar for sleek look but keep functionality */
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+        /* iOS-like Click Animation */
+        .active-scale:active { transform: scale(0.97); transition: transform 0.1s; }
+
+        /* Animations */
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        .animate-fade-in { animation: fadeIn 0.2s ease-out; }
+        
+        @keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        .animate-slide-up { animation: slideUp 0.3s ease-out; }
+    </style>
+
+    <!-- Firebase SDKs (Modular) -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js";
+        import { getFirestore, collection, addDoc, onSnapshot, doc, updateDoc, deleteDoc, runTransaction } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
+
+        // --- FIREBASE CONFIGURATION ---
+        const firebaseConfig = {
+            apiKey: "AIzaSyDFAe75ygW67nkir6J-K_XZ1rE76_rTNEU",
+            authDomain: "victual-4eae5.firebaseapp.com",
+            projectId: "victual-4eae5",
+            storageBucket: "victual-4eae5.firebasestorage.app",
+            messagingSenderId: "538369436756",
+            appId: "1:538369436756:web:4552d255d17c9d1ddb51c1"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        
+        // Expose DB to window so React can access it
+        window.db = db;
+        window.dbMethods = { collection, addDoc, onSnapshot, doc, updateDoc, deleteDoc, runTransaction };
+    </script>
+</head>
+<body class="text-gray-900 h-screen w-screen overflow-hidden flex flex-col">
+
+    <div id="root" class="flex-1 flex flex-col h-full w-full"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useMemo } = React;
+        const { collection, addDoc, onSnapshot, doc, updateDoc, deleteDoc, runTransaction } = window.dbMethods;
+        const db = window.db;
+
+        // --- REUSABLE COMPONENTS ---
+
+        // Generic Modal Component
+        const Modal = ({ title, children, onCancel, onConfirm, confirmText = "Confirm", confirmColor = "bg-blue-500", showCancel = true, isLoading = false, hideButtons = false }) => (
+            <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[70] flex items-center justify-center p-4 animate-fade-in">
+                <div className="bg-white rounded-3xl w-full max-w-sm p-6 shadow-2xl animate-slide-up flex flex-col max-h-[80vh]">
+                    <div className="flex justify-between items-center mb-4">
+                        <h3 className="text-xl font-bold">{title}</h3>
+                        {hideButtons && (
+                            <button onClick={onCancel} className="text-gray-400 hover:text-gray-600 bg-gray-100 p-1 rounded-full">
+                                <i data-lucide="x" className="w-5 h-5"></i>
+                            </button>
+                        )}
+                    </div>
+                    <div className="text-gray-600 mb-2 text-sm overflow-y-auto flex-1">{children}</div>
+                    {!hideButtons && (
+                        <div className="flex gap-3 mt-4">
+                            {showCancel && !isLoading && (
+                                <button onClick={onCancel} className="flex-1 py-3 text-gray-500 font-medium bg-gray-100 rounded-xl active-scale">
+                                    Cancel
+                                </button>
+                            )}
+                            <button 
+                                onClick={onConfirm} 
+                                disabled={isLoading}
+                                className={`flex-1 ${isLoading ? 'bg-gray-400 cursor-wait' : confirmColor} text-white py-3 rounded-xl font-bold shadow-lg active-scale`}
+                            >
+                                {isLoading ? 'Processing...' : confirmText}
+                            </button>
+                        </div>
+                    )}
+                </div>
+            </div>
+        );
+
+        // 1. Tab Bar Navigation (Bottom)
+        const TabBar = ({ currentTab, setTab }) => {
+            const tabs = [
+                { id: 'inventory', label: 'Supplies', icon: 'box' },
+                { id: 'menu', label: 'Menus', icon: 'utensils-crossed' },
+                { id: 'cook', label: 'Cook', icon: 'chef-hat' },
+            ];
+
+            return (
+                <div className="bg-white border-t border-gray-200 pb-safe fixed bottom-0 w-full z-50">
+                    <div className="flex justify-around items-center h-16">
+                        {tabs.map(tab => (
+                            <button 
+                                key={tab.id}
+                                onClick={() => setTab(tab.id)}
+                                className={`flex flex-col items-center justify-center w-full h-full active-scale ${currentTab === tab.id ? 'text-blue-500' : 'text-gray-400'}`}
+                            >
+                                <i data-lucide={tab.icon} className="w-6 h-6 mb-1"></i>
+                                <span className="text-[10px] font-medium">{tab.label}</span>
+                            </button>
+                        ))}
+                    </div>
+                </div>
+            );
+        };
+
+        // 2. Inventory Item Card
+        const InventoryCard = ({ item, onEdit, onDelete }) => {
+            // Determine status color
+            const isLow = item.qty <= 1 && item.trackQuantity;
+            const canDelete = !item.trackQuantity || item.qty === 0;
+            
+            return (
+                <div onClick={() => onEdit(item)} className="bg-white p-4 rounded-2xl shadow-sm flex justify-between items-center active-scale cursor-pointer border border-transparent hover:border-blue-100 transition-colors relative group">
+                    <div>
+                        <h3 className="font-semibold text-lg">{item.name}</h3>
+                        <p className="text-gray-500 text-sm">
+                            {item.trackQuantity 
+                                ? `${item.qty} ${item.unit}` 
+                                : <span className="text-orange-500 font-medium bg-orange-50 px-2 py-0.5 rounded-md text-xs">Manual Check</span>}
+                        </p>
+                    </div>
+                    
+                    <div className="flex items-center gap-3">
+                         {item.trackQuantity && (
+                            <div className={`w-3 h-3 rounded-full ${isLow ? 'bg-red-500 animate-pulse' : 'bg-green-500'}`}></div>
+                        )}
+                        {canDelete ? (
+                            <button 
+                                onClick={(e) => { e.stopPropagation(); onDelete(item); }}
+                                className="p-2 text-gray-300 hover:text-red-500 transition-colors"
+                            >
+                                <i data-lucide="trash-2" className="w-4 h-4"></i>
+                            </button>
+                        ) : (
+                            <div className="p-2 text-gray-200 cursor-not-allowed" title="Cannot delete item with stock">
+                                <i data-lucide="lock" className="w-4 h-4"></i>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            );
+        };
+
+        // 3. Main Application
+        const App = () => {
+            const [view, setView] = useState('inventory'); // inventory, menu, cook
+            const [inventory, setInventory] = useState([]);
+            const [menus, setMenus] = useState([]);
+            const [loading, setLoading] = useState(true);
+
+            // Fetch Data from Firestore
+            useEffect(() => {
+                const unsubInventory = onSnapshot(collection(db, "inventory"), (snapshot) => {
+                    const items = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                    setInventory(items);
+                });
+
+                const unsubMenus = onSnapshot(collection(db, "menus"), (snapshot) => {
+                    const items = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                    setMenus(items);
+                    setLoading(false);
+                });
+
+                // Init Icons
+                setTimeout(() => lucide.createIcons(), 100);
+
+                return () => { unsubInventory(); unsubMenus(); };
+            }, []);
+
+            // Re-run icons when view changes
+            useEffect(() => {
+                setTimeout(() => lucide.createIcons(), 100);
+            }, [view, inventory, menus]);
+
+            // --- VIEW: INVENTORY ---
+            const InventoryView = () => {
+                const [isModalOpen, setModalOpen] = useState(false);
+                const [deleteItem, setDeleteItem] = useState(null); 
+                const [editingId, setEditingId] = useState(null);
+                const [newItem, setNewItem] = useState({ name: '', qty: '', unit: 'pcs', trackQuantity: true });
+                const [errorMsg, setErrorMsg] = useState('');
+
+                const openAdd = () => {
+                    setEditingId(null);
+                    setNewItem({ name: '', qty: '', unit: 'pcs', trackQuantity: true });
+                    setErrorMsg('');
+                    setModalOpen(true);
+                };
+
+                const openEdit = (item) => {
+                    setEditingId(item.id);
+                    setNewItem({ 
+                        name: item.name, 
+                        qty: item.qty, 
+                        unit: item.unit, 
+                        trackQuantity: item.trackQuantity 
+                    });
+                    setErrorMsg('');
+                    setModalOpen(true);
+                };
+
+                const handleSave = async () => {
+                    if (!newItem.name) return;
+                    
+                    const normalizedName = newItem.name.trim().toUpperCase();
+
+                    // Check duplicate
+                    const duplicate = inventory.find(i => i.name === normalizedName && i.id !== editingId);
+                    if (duplicate) {
+                        setErrorMsg('This item already exists.');
+                        return;
+                    }
+
+                    try {
+                        const data = {
+                            name: normalizedName,
+                            qty: Number(newItem.qty) || 0,
+                            unit: newItem.unit,
+                            trackQuantity: newItem.trackQuantity
+                        };
+
+                        if (editingId) {
+                            await updateDoc(doc(db, "inventory", editingId), data);
+                        } else {
+                            await addDoc(collection(db, "inventory"), data);
+                        }
+                        
+                        setModalOpen(false);
+                    } catch(e) {
+                        console.error(e);
+                    }
+                };
+
+                const confirmDelete = async () => {
+                    if(deleteItem) {
+                        await deleteDoc(doc(db, "inventory", deleteItem.id));
+                        setDeleteItem(null);
+                    }
+                };
+
+                return (
+                    <div className="p-5 pt-safe pb-32">
+                        <header className="flex justify-between items-end mb-6">
+                            <h1 className="text-3xl font-bold tracking-tight">Supplies</h1>
+                            <button onClick={openAdd} className="bg-blue-500 text-white rounded-full p-2 shadow-lg active-scale">
+                                <i data-lucide="plus" className="w-6 h-6"></i>
+                            </button>
+                        </header>
+
+                        <div className="flex flex-col gap-3">
+                            {inventory.length === 0 && !loading && <p className="text-gray-400 text-center mt-10">No supplies yet.</p>}
+                            {/* Sort alphabetically */}
+                            {inventory.sort((a,b) => a.name.localeCompare(b.name)).map(item => (
+                                <InventoryCard 
+                                    key={item.id} 
+                                    item={item} 
+                                    onEdit={openEdit} 
+                                    onDelete={(item) => setDeleteItem(item)} 
+                                />
+                            ))}
+                        </div>
+
+                        {/* Delete Confirmation Modal */}
+                        {deleteItem && (
+                            <Modal 
+                                title="Delete Supply?" 
+                                onCancel={() => setDeleteItem(null)}
+                                onConfirm={confirmDelete}
+                                confirmText="Delete"
+                                confirmColor="bg-red-500"
+                            >
+                                Are you sure you want to remove <strong>{deleteItem.name}</strong>?
+                            </Modal>
+                        )}
+
+                        {/* Add/Edit Item Modal */}
+                        {isModalOpen && (
+                            <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                                <div className="bg-white rounded-3xl w-full max-w-sm p-6 shadow-2xl animate-slide-up">
+                                    <h2 className="text-xl font-bold mb-4">{editingId ? 'Edit Supply' : 'Add Supply'}</h2>
+                                    
+                                    <input type="text" placeholder="Item Name (e.g., ONIONS)" 
+                                        className="w-full bg-gray-100 p-3 rounded-xl mb-3 outline-none focus:ring-2 ring-blue-500 uppercase"
+                                        value={newItem.name} onChange={e => setNewItem({...newItem, name: e.target.value.toUpperCase()})}
+                                    />
+                                    
+                                    {errorMsg && <p className="text-red-500 text-sm mb-3 font-medium">{errorMsg}</p>}
+
+                                    <div className="flex gap-3 mb-4">
+                                        <button 
+                                            onClick={() => setNewItem({...newItem, trackQuantity: true})}
+                                            className={`flex-1 p-2 rounded-xl text-sm font-medium border-2 ${newItem.trackQuantity ? 'border-blue-500 text-blue-500 bg-blue-50' : 'border-gray-100 text-gray-400'}`}
+                                        >
+                                            Countable
+                                        </button>
+                                        <button 
+                                            onClick={() => setNewItem({...newItem, trackQuantity: false})}
+                                            className={`flex-1 p-2 rounded-xl text-sm font-medium border-2 ${!newItem.trackQuantity ? 'border-blue-500 text-blue-500 bg-blue-50' : 'border-gray-100 text-gray-400'}`}
+                                        >
+                                            Manual Check
+                                        </button>
+                                    </div>
+
+                                    {newItem.trackQuantity && (
+                                        <div className="flex gap-2 mb-4">
+                                            <input type="number" placeholder="Qty" 
+                                                className="w-1/3 bg-gray-100 p-3 rounded-xl outline-none"
+                                                value={newItem.qty} onChange={e => setNewItem({...newItem, qty: e.target.value})}
+                                            />
+                                            <input type="text" placeholder="Unit (pcs, cans)" 
+                                                className="w-2/3 bg-gray-100 p-3 rounded-xl outline-none"
+                                                value={newItem.unit} onChange={e => setNewItem({...newItem, unit: e.target.value})}
+                                            />
+                                        </div>
+                                    )}
+
+                                    <div className="flex gap-2">
+                                        <button onClick={() => setModalOpen(false)} className="flex-1 py-3 text-gray-500 font-medium">Cancel</button>
+                                        <button onClick={handleSave} className="flex-1 bg-blue-500 text-white py-3 rounded-xl font-bold active-scale">Save</button>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                );
+            };
+
+            // --- VIEW: MENU BUILDER ---
+            const MenuView = () => {
+                const [isModalOpen, setModalOpen] = useState(false);
+                const [deleteMenu, setDeleteMenu] = useState(null); 
+                const [editingId, setEditingId] = useState(null);
+                const [menuName, setMenuName] = useState('');
+                const [selectedIngredients, setSelectedIngredients] = useState([]); 
+
+                const openAdd = () => {
+                    setEditingId(null);
+                    setMenuName('');
+                    setSelectedIngredients([]);
+                    setModalOpen(true);
+                }
+
+                const openEdit = (menu) => {
+                    setEditingId(menu.id);
+                    setMenuName(menu.name);
+                    setSelectedIngredients(menu.ingredients || []);
+                    setModalOpen(true);
+                }
+
+                const toggleIngredient = (invItem) => {
+                    const exists = selectedIngredients.find(i => i.id === invItem.id);
+                    if (exists) {
+                        setSelectedIngredients(selectedIngredients.filter(i => i.id !== invItem.id));
+                    } else {
+                        setSelectedIngredients([...selectedIngredients, { id: invItem.id, name: invItem.name, reqQty: 1, unit: invItem.unit, trackQuantity: invItem.trackQuantity }]);
+                    }
+                };
+
+                const updateIngredientQty = (id, qty) => {
+                    setSelectedIngredients(selectedIngredients.map(i => i.id === id ? { ...i, reqQty: Number(qty) } : i));
+                };
+
+                const saveMenu = async () => {
+                    if (!menuName) return;
+                    
+                    // Filter out zero quantity ingredients
+                    const cleanIngredients = selectedIngredients.filter(i => !i.trackQuantity || (i.reqQty && i.reqQty > 0));
+
+                    const data = {
+                        name: menuName,
+                        ingredients: cleanIngredients
+                    };
+
+                    if (editingId) {
+                        await updateDoc(doc(db, "menus", editingId), data);
+                    } else {
+                        await addDoc(collection(db, "menus"), data);
+                    }
+
+                    setModalOpen(false);
+                };
+                
+                const confirmDelete = async () => {
+                    if(deleteMenu) {
+                        await deleteDoc(doc(db, "menus", deleteMenu.id));
+                        setDeleteMenu(null);
+                    }
+                };
+
+                return (
+                    <div className="p-5 pt-safe pb-32">
+                        <header className="flex justify-between items-end mb-6">
+                            <h1 className="text-3xl font-bold tracking-tight">Menus</h1>
+                            <button onClick={openAdd} className="bg-blue-500 text-white rounded-full p-2 shadow-lg active-scale">
+                                <i data-lucide="plus" className="w-6 h-6"></i>
+                            </button>
+                        </header>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            {menus.map(menu => (
+                                <div key={menu.id} className="bg-white p-5 rounded-2xl shadow-sm relative group">
+                                    <div className="absolute top-4 right-4 flex gap-2">
+                                        <button onClick={() => openEdit(menu)} className="text-gray-300 hover:text-blue-500 p-1">
+                                            <i data-lucide="pencil" className="w-4 h-4"></i>
+                                        </button>
+                                        <button onClick={() => setDeleteMenu(menu)} className="text-gray-300 hover:text-red-500 p-1">
+                                            <i data-lucide="trash-2" className="w-4 h-4"></i>
+                                        </button>
+                                    </div>
+                                    <h3 className="font-bold text-xl mb-2 pr-16">{menu.name}</h3>
+                                    <div className="flex flex-wrap gap-1">
+                                        {menu.ingredients.map((ing, idx) => (
+                                            <span key={idx} className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-md">
+                                                {ing.trackQuantity ? `${ing.reqQty} ${ing.unit} ` : ''} {ing.name}
+                                            </span>
+                                        ))}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+
+                        {/* Delete Menu Confirmation */}
+                        {deleteMenu && (
+                            <Modal 
+                                title="Delete Menu?" 
+                                onCancel={() => setDeleteMenu(null)}
+                                onConfirm={confirmDelete}
+                                confirmText="Delete"
+                                confirmColor="bg-red-500"
+                            >
+                                Are you sure you want to remove <strong>{deleteMenu.name}</strong>?
+                            </Modal>
+                        )}
+
+                        {/* Add/Edit Menu Modal */}
+                        {isModalOpen && (
+                            <div className="fixed inset-0 bg-white z-[60] pt-safe overflow-y-auto">
+                                <div className="p-5 pb-32">
+                                    <div className="flex justify-between items-center mb-6">
+                                        <button onClick={() => setModalOpen(false)} className="text-gray-500 text-lg">Cancel</button>
+                                        <h2 className="text-lg font-bold">{editingId ? 'Edit Menu' : 'New Menu'}</h2>
+                                        <button onClick={saveMenu} className="text-blue-500 text-lg font-bold">Save</button>
+                                    </div>
+
+                                    <input type="text" placeholder="Dish Name (e.g., Adobo)" 
+                                        className="w-full text-2xl font-bold placeholder-gray-300 outline-none mb-8 bg-transparent"
+                                        value={menuName} onChange={e => setMenuName(e.target.value)}
+                                        autoFocus
+                                    />
+
+                                    <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-3">Select Ingredients</h3>
+                                    <div className="flex flex-col gap-2">
+                                        {inventory.sort((a,b) => a.name.localeCompare(b.name)).map(item => {
+                                            const isSelected = selectedIngredients.find(i => i.id === item.id);
+                                            // Check if overcommitted
+                                            const isOvercommitted = isSelected && item.trackQuantity && isSelected.reqQty > item.qty;
+
+                                            return (
+                                                <div key={item.id} className={`p-3 rounded-xl border-2 transition-all ${isSelected ? 'border-blue-500 bg-blue-50' : 'border-transparent bg-white shadow-sm'}`}>
+                                                    <div className="flex justify-between items-center" onClick={() => toggleIngredient(item)}>
+                                                        <div>
+                                                            <span className="font-medium">{item.name}</span>
+                                                            <span className="text-xs text-gray-400 ml-2">
+                                                                (Stock: {item.trackQuantity ? item.qty : 'Manual'})
+                                                            </span>
+                                                        </div>
+                                                        {isSelected && <i data-lucide="check-circle" className="w-5 h-5 text-blue-500"></i>}
+                                                    </div>
+                                                    
+                                                    {isSelected && item.trackQuantity && (
+                                                        <div className="mt-3 flex flex-wrap items-center gap-2 animate-fade-in">
+                                                            <span className="text-sm text-gray-500">Needs:</span>
+                                                            <input type="number" 
+                                                                className={`w-16 p-1 bg-white border rounded text-center font-bold ${isOvercommitted ? 'border-orange-500 text-orange-600' : 'border-blue-200'}`}
+                                                                value={isSelected.reqQty}
+                                                                onChange={(e) => updateIngredientQty(item.id, e.target.value)}
+                                                            />
+                                                            <span className="text-sm text-gray-500">{item.unit}</span>
+                                                            {isOvercommitted && (
+                                                                <span className="text-xs font-bold text-orange-500 ml-auto bg-orange-100 px-2 py-1 rounded-full">Exceeds Stock</span>
+                                                            )}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                );
+            };
+
+            // --- VIEW: COOKING PLANNER ---
+            const CookView = () => {
+                const [confirmingMenu, setConfirmingMenu] = useState(null);
+                const [successMessage, setSuccessMessage] = useState(null);
+                const [errorMessage, setErrorMessage] = useState(null);
+                const [isProcessing, setIsProcessing] = useState(false);
+                const [showHistory, setShowHistory] = useState(false); // History Modal State
+                
+                const toggleHistory = () => {
+                    setShowHistory(!showHistory);
+                    setTimeout(() => lucide.createIcons(), 100);
+                };
+
+                const initiateCook = (menu) => {
+                    setConfirmingMenu(menu);
+                };
+
+                const executeCook = async () => {
+                    if (!confirmingMenu || isProcessing) return;
+                    setIsProcessing(true);
+                    const menu = confirmingMenu;
+
+                    try {
+                        await runTransaction(db, async (transaction) => {
+                            // Setup refs
+                            const menuRef = doc(db, "menus", menu.id); 
+                            
+                            // Phase 1: Reads (Read EVERYTHING before writes)
+                            const reads = [];
+                            
+                            // 1a. Read Menu (REQUIRED for transaction update in client SDK)
+                            reads.push({ ref: menuRef, type: 'menu' });
+
+                            // 1b. Read Ingredients
+                            for (let ing of (menu.ingredients || [])) {
+                                if (ing.trackQuantity) {
+                                    const itemRef = doc(db, "inventory", ing.id);
+                                    reads.push({ ref: itemRef, type: 'inventory', ing });
+                                }
+                            }
+
+                            // 2. Perform all reads
+                            const snapshots = [];
+                            for (let readItem of reads) {
+                                const snap = await transaction.get(readItem.ref);
+                                snapshots.push({ snap, ...readItem });
+                            }
+
+                            const updates = [];
+
+                            // 3. Validation Logic (Pure logic)
+                            for (let item of snapshots) {
+                                // Check Menu existence
+                                if (item.type === 'menu') {
+                                    if (!item.snap.exists()) throw new Error("Menu no longer exists.");
+                                    continue; 
+                                }
+
+                                // Check Inventory
+                                if (item.type === 'inventory') {
+                                    if (!item.snap.exists()) {
+                                        throw new Error(`Item "${item.ing.name}" no longer exists in inventory.`);
+                                    }
+                                    
+                                    const currentStock = Number(item.snap.data().qty) || 0;
+                                    const reqQty = Number(item.ing.reqQty) || 0;
+
+                                    if (currentStock < reqQty) {
+                                        throw new Error(`Insufficient stock for ${item.ing.name} (Have: ${currentStock}, Need: ${reqQty})`);
+                                    }
+                                    
+                                    updates.push({ ref: item.ref, newQty: currentStock - reqQty });
+                                }
+                            }
+
+                            // Phase 2: Writes (Only writes allowed now)
+                            
+                            // 1. Update Inventory
+                            for (let update of updates) {
+                                transaction.update(update.ref, { qty: update.newQty });
+                            }
+                            
+                            // 2. Update Menu
+                            transaction.update(menuRef, { lastPrepared: new Date().toISOString() });
+                        });
+                        
+                        setConfirmingMenu(null);
+                        setSuccessMessage(`Inventory updated for ${menu.name}!`);
+                    } catch (e) {
+                        console.error("Transaction failed: ", e);
+                        setConfirmingMenu(null);
+                        setErrorMessage(e.message || "An unexpected error occurred."); 
+                    } finally {
+                        setIsProcessing(false);
+                    }
+                };
+
+                // Helper: Get weekly status
+                const getWeeklyStatus = (lastPreparedStr) => {
+                    if (!lastPreparedStr) return { status: 'pending', label: 'Not cooked this week', color: 'text-gray-400', icon: 'circle' };
+                    
+                    const last = new Date(lastPreparedStr);
+                    const now = new Date();
+                    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+                    
+                    // Get Sunday of current week
+                    const sun = new Date(today);
+                    sun.setDate(today.getDate() - today.getDay()); // 0 is Sunday
+                    sun.setHours(0,0,0,0);
+                    
+                    if (last >= sun) {
+                        // It's this week
+                        if (last.toDateString() === today.toDateString()) {
+                            return { status: 'today', label: 'Prepared Today', color: 'text-blue-500', icon: 'check-circle-2' };
+                        }
+                        const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+                        return { status: 'done', label: `Prepared ${days[last.getDay()]}`, color: 'text-green-500', icon: 'check-circle' };
+                    }
+                    
+                    return { status: 'pending', label: 'Not cooked this week', color: 'text-gray-400', icon: 'circle' };
+                };
+
+                // SORTING LOGIC: Prepared TODAY goes to bottom
+                const sortedMenus = useMemo(() => {
+                    return [...menus].sort((a, b) => {
+                        const dateA = a.lastPrepared ? new Date(a.lastPrepared) : new Date(0);
+                        const dateB = b.lastPrepared ? new Date(b.lastPrepared) : new Date(0);
+                        
+                        // Check if prepared *today*
+                        const today = new Date().toDateString();
+                        const aIsToday = dateA.toDateString() === today;
+                        const bIsToday = dateB.toDateString() === today;
+
+                        // If A is today and B is not, A goes to bottom (1)
+                        if (aIsToday && !bIsToday) return 1;
+                        // If B is today and A is not, B goes to bottom (-1)
+                        if (!aIsToday && bIsToday) return -1;
+                        
+                        // Secondary sort: Alphabetical
+                        return a.name.localeCompare(b.name);
+                    });
+                }, [menus]);
+
+                return (
+                    <div className="p-5 pt-safe pb-32">
+                         <header className="flex justify-between items-end mb-6">
+                            <h1 className="text-3xl font-bold tracking-tight">Cook</h1>
+                            <button onClick={toggleHistory} className="p-2 text-gray-400 hover:text-blue-500 active-scale">
+                                <i data-lucide="clipboard-list" className="w-6 h-6"></i>
+                            </button>
+                        </header>
+
+                        <div className="flex flex-col gap-4">
+                            {sortedMenus.map(menu => {
+                                // Calculate Status
+                                let canCook = true;
+                                let missingCount = 0;
+                                
+                                // Last prepared Check
+                                const lastCooked = menu.lastPrepared ? new Date(menu.lastPrepared) : null;
+                                const isToday = lastCooked && lastCooked.toDateString() === new Date().toDateString();
+                                
+                                menu.ingredients.forEach(ing => {
+                                    if (ing.trackQuantity) {
+                                        const stock = inventory.find(i => i.id === ing.id);
+                                        // Ensure numeric comparison
+                                        const stockQty = stock ? Number(stock.qty) : 0;
+                                        const reqQty = Number(ing.reqQty);
+                                        
+                                        if (!stock || stockQty < reqQty) {
+                                            canCook = false;
+                                            missingCount++;
+                                        }
+                                    }
+                                });
+
+                                return (
+                                    <div key={menu.id} className="bg-white p-5 rounded-2xl shadow-sm">
+                                        <div className="flex justify-between items-start mb-4">
+                                            <div>
+                                                <h3 className="font-bold text-xl">{menu.name}</h3>
+                                                {/* Prepared Indicator */}
+                                                {lastCooked && (
+                                                    <div className="flex items-center gap-1 mt-1 animate-fade-in">
+                                                        {isToday ? (
+                                                            <>
+                                                                <i data-lucide="check-circle-2" className="w-4 h-4 text-blue-500"></i>
+                                                                <span className="text-xs font-bold text-blue-500">Prepared Today</span>
+                                                            </>
+                                                        ) : (
+                                                            <span className="text-xs text-gray-400 font-medium">Last: {lastCooked.toLocaleDateString()}</span>
+                                                        )}
+                                                    </div>
+                                                )}
+                                            </div>
+                                            <span className={`text-xs font-bold px-2 py-1 rounded-full ${canCook ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'}`}>
+                                                {canCook ? 'Ready' : `${missingCount} Missing`}
+                                            </span>
+                                        </div>
+                                        
+                                        <div className="space-y-2 mb-5">
+                                            {menu.ingredients.map(ing => {
+                                                const stock = inventory.find(i => i.id === ing.id);
+                                                const stockQty = stock ? Number(stock.qty) : 0;
+                                                const reqQty = Number(ing.reqQty);
+                                                const hasEnough = !ing.trackQuantity || (stock && stockQty >= reqQty);
+                                                
+                                                return (
+                                                    <div key={ing.id} className="flex justify-between text-sm">
+                                                        <span className="text-gray-600">{ing.name}</span>
+                                                        <span className={hasEnough ? 'text-gray-400' : 'text-red-500 font-bold'}>
+                                                            {ing.trackQuantity ? `${reqQty} ${ing.unit}` : 'Manual'}
+                                                        </span>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+
+                                        <button 
+                                            onClick={() => initiateCook(menu)}
+                                            disabled={!canCook || isProcessing}
+                                            className={`w-full py-3 rounded-xl font-bold transition-all active-scale ${canCook ? 'bg-blue-500 text-white shadow-lg shadow-blue-200' : 'bg-gray-100 text-gray-400 cursor-not-allowed'}`}
+                                        >
+                                            {canCook ? 'Proceed' : 'Not Enough Supplies'}
+                                        </button>
+                                    </div>
+                                );
+                            })}
+                        </div>
+
+                        {/* Confirmation Modal */}
+                        {confirmingMenu && (
+                            <Modal 
+                                title={`Prepare ${confirmingMenu.name}?`}
+                                onCancel={() => !isProcessing && setConfirmingMenu(null)}
+                                onConfirm={executeCook}
+                                confirmText="Proceed"
+                                confirmColor="bg-green-500"
+                                isLoading={isProcessing}
+                            >
+                                This will automatically deduct ingredients from your supplies.
+                            </Modal>
+                        )}
+
+                         {/* Success Modal */}
+                         {successMessage && (
+                            <Modal 
+                                title="Bon Appétit!" 
+                                onConfirm={() => setSuccessMessage(null)}
+                                confirmText="Great"
+                                showCancel={false}
+                                confirmColor="bg-blue-500"
+                            >
+                                {successMessage}
+                            </Modal>
+                        )}
+                        
+                        {/* Error Modal */}
+                         {errorMessage && (
+                            <Modal 
+                                title="Preparation Failed" 
+                                onConfirm={() => setErrorMessage(null)}
+                                confirmText="Okay"
+                                showCancel={false}
+                                confirmColor="bg-red-500"
+                            >
+                                {errorMessage}
+                            </Modal>
+                        )}
+
+                        {/* History Checklist Modal */}
+                        {showHistory && (
+                            <Modal 
+                                title="Weekly Checklist" 
+                                onCancel={toggleHistory}
+                                hideButtons={true}
+                            >
+                                <div className="flex flex-col gap-2 pt-2">
+                                    {menus.sort((a,b) => a.name.localeCompare(b.name)).map(menu => {
+                                        const status = getWeeklyStatus(menu.lastPrepared);
+                                        return (
+                                            <div key={menu.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-xl">
+                                                <div className="flex items-center gap-3">
+                                                    <i data-lucide={status.icon} className={`w-5 h-5 ${status.color}`}></i>
+                                                    <span className={`font-medium ${status.status !== 'pending' ? 'text-gray-800' : 'text-gray-500'}`}>
+                                                        {menu.name}
+                                                    </span>
+                                                </div>
+                                                <span className={`text-xs font-bold ${status.color}`}>
+                                                    {status.label}
+                                                </span>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </Modal>
+                        )}
+                    </div>
+                );
+            };
+
+            return (
+                <div className="flex-1 flex flex-col h-full bg-[#F2F2F7]">
+                    <div className="flex-1 overflow-y-auto no-scrollbar">
+                        {view === 'inventory' && <InventoryView />}
+                        {view === 'menu' && <MenuView />}
+                        {view === 'cook' && <CookView />}
+                    </div>
+                    <TabBar currentTab={view} setTab={setView} />
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('./sw.js')
+                    .then(reg => console.log('Service Worker registered', reg))
+                    .catch(err => console.log('Service Worker registration failed', err));
+            });
+        }
+    </script>
+</body>
+</html>
