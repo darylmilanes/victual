@@ -11,7 +11,7 @@
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#F2F2F7">
     
-    <!-- Changed to 'default' to respect iPhone Safe Areas automatically -->
+    <!-- Respect iPhone Safe Areas -->
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     
@@ -86,16 +86,16 @@
 
         // --- REUSABLE COMPONENTS ---
 
-        // Sticky Header Component (Fixes overlap issues)
-        const StickyHeader = ({ title, onAdd, children, rightAction }) => (
-            <div className="sticky top-0 z-40 bg-[#F2F2F7]/95 backdrop-blur-md pt-6 px-5 pb-4 border-b border-gray-200/50 transition-all">
-                <div className="flex justify-between items-end">
+        // Fixed Header Component (Absolute Positioned)
+        const FixedHeader = ({ title, onAdd, children, rightAction }) => (
+            <div className="absolute top-0 left-0 right-0 z-20 bg-[#F2F2F7]/95 backdrop-blur-md pt-safe border-b border-gray-200/50 shadow-sm transition-all">
+                <div className="px-5 pt-6 pb-4 flex justify-between items-end">
                     <h1 className="text-3xl font-bold tracking-tight">{title}</h1>
-                    <div className="flex gap-3">
+                    <div className="flex gap-3 items-center">
                         {children}
                         {rightAction}
                         {onAdd && (
-                            <button onClick={onAdd} className="bg-blue-500 text-white rounded-full p-2 shadow-lg active-scale">
+                            <button onClick={onAdd} className="bg-blue-500 text-white rounded-full p-2 shadow-lg active-scale hover:bg-blue-600 transition-colors">
                                 <i data-lucide="plus" className="w-6 h-6"></i>
                             </button>
                         )}
@@ -297,19 +297,21 @@
                 };
 
                 return (
-                    <div className="pb-32">
-                        <StickyHeader title="Supplies" onAdd={openAdd} />
+                    <div className="h-full w-full relative bg-[#F2F2F7]">
+                        <FixedHeader title="Supplies" onAdd={openAdd} />
 
-                        <div className="flex flex-col gap-3 px-5 pt-3">
-                            {inventory.length === 0 && !loading && <p className="text-gray-400 text-center mt-10">No supplies yet.</p>}
-                            {inventory.sort((a,b) => a.name.localeCompare(b.name)).map(item => (
-                                <InventoryCard 
-                                    key={item.id} 
-                                    item={item} 
-                                    onEdit={openEdit} 
-                                    onDelete={(item) => setDeleteItem(item)} 
-                                />
-                            ))}
+                        <div className="h-full overflow-y-auto w-full px-5 pt-32 pb-32 no-scrollbar">
+                            <div className="flex flex-col gap-3">
+                                {inventory.length === 0 && !loading && <p className="text-gray-400 text-center mt-10">No supplies yet.</p>}
+                                {inventory.sort((a,b) => a.name.localeCompare(b.name)).map(item => (
+                                    <InventoryCard 
+                                        key={item.id} 
+                                        item={item} 
+                                        onEdit={openEdit} 
+                                        onDelete={(item) => setDeleteItem(item)} 
+                                    />
+                                ))}
+                            </div>
                         </div>
 
                         {/* Delete Confirmation Modal */}
@@ -439,30 +441,32 @@
                 };
 
                 return (
-                    <div className="pb-32">
-                        <StickyHeader title="Menus" onAdd={openAdd} />
+                    <div className="h-full w-full relative bg-[#F2F2F7]">
+                        <FixedHeader title="Menus" onAdd={openAdd} />
 
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 px-5 pt-3">
-                            {menus.map(menu => (
-                                <div key={menu.id} className="bg-white p-5 rounded-2xl shadow-sm relative group">
-                                    <div className="absolute top-4 right-4 flex gap-2">
-                                        <button onClick={() => openEdit(menu)} className="text-gray-300 hover:text-blue-500 p-1">
-                                            <i data-lucide="pencil" className="w-4 h-4"></i>
-                                        </button>
-                                        <button onClick={() => setDeleteMenu(menu)} className="text-gray-300 hover:text-red-500 p-1">
-                                            <i data-lucide="trash-2" className="w-4 h-4"></i>
-                                        </button>
+                        <div className="h-full overflow-y-auto w-full px-5 pt-32 pb-32 no-scrollbar">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                {menus.map(menu => (
+                                    <div key={menu.id} className="bg-white p-5 rounded-2xl shadow-sm relative group">
+                                        <div className="absolute top-4 right-4 flex gap-2">
+                                            <button onClick={() => openEdit(menu)} className="text-gray-300 hover:text-blue-500 p-1">
+                                                <i data-lucide="pencil" className="w-4 h-4"></i>
+                                            </button>
+                                            <button onClick={() => setDeleteMenu(menu)} className="text-gray-300 hover:text-red-500 p-1">
+                                                <i data-lucide="trash-2" className="w-4 h-4"></i>
+                                            </button>
+                                        </div>
+                                        <h3 className="font-bold text-xl mb-2 pr-16">{menu.name}</h3>
+                                        <div className="flex flex-wrap gap-1">
+                                            {menu.ingredients.map((ing, idx) => (
+                                                <span key={idx} className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-md">
+                                                    {ing.trackQuantity ? `${ing.reqQty} ${ing.unit} ` : ''} {ing.name}
+                                                </span>
+                                            ))}
+                                        </div>
                                     </div>
-                                    <h3 className="font-bold text-xl mb-2 pr-16">{menu.name}</h3>
-                                    <div className="flex flex-wrap gap-1">
-                                        {menu.ingredients.map((ing, idx) => (
-                                            <span key={idx} className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-md">
-                                                {ing.trackQuantity ? `${ing.reqQty} ${ing.unit} ` : ''} {ing.name}
-                                            </span>
-                                        ))}
-                                    </div>
-                                </div>
-                            ))}
+                                ))}
+                            </div>
                         </div>
 
                         {/* Delete Menu Confirmation */}
@@ -659,8 +663,8 @@
                 }, [menus]);
 
                 return (
-                    <div className="pb-32">
-                        <StickyHeader 
+                    <div className="h-full w-full relative bg-[#F2F2F7]">
+                        <FixedHeader 
                             title="Cook" 
                             rightAction={
                                 <button onClick={toggleHistory} className="p-2 text-gray-400 hover:text-blue-500 active-scale">
@@ -669,78 +673,80 @@
                             } 
                         />
 
-                        <div className="flex flex-col gap-4 px-5 pt-3">
-                            {sortedMenus.map(menu => {
-                                let canCook = true;
-                                let missingCount = 0;
-                                
-                                const lastCooked = menu.lastPrepared ? new Date(menu.lastPrepared) : null;
-                                const isToday = lastCooked && lastCooked.toDateString() === new Date().toDateString();
-                                
-                                menu.ingredients.forEach(ing => {
-                                    if (ing.trackQuantity) {
-                                        const stock = inventory.find(i => i.id === ing.id);
-                                        const stockQty = stock ? Number(stock.qty) : 0;
-                                        const reqQty = Number(ing.reqQty);
-                                        
-                                        if (!stock || stockQty < reqQty) {
-                                            canCook = false;
-                                            missingCount++;
+                        <div className="h-full overflow-y-auto w-full px-5 pt-32 pb-32 no-scrollbar">
+                            <div className="flex flex-col gap-4">
+                                {sortedMenus.map(menu => {
+                                    let canCook = true;
+                                    let missingCount = 0;
+                                    
+                                    const lastCooked = menu.lastPrepared ? new Date(menu.lastPrepared) : null;
+                                    const isToday = lastCooked && lastCooked.toDateString() === new Date().toDateString();
+                                    
+                                    menu.ingredients.forEach(ing => {
+                                        if (ing.trackQuantity) {
+                                            const stock = inventory.find(i => i.id === ing.id);
+                                            const stockQty = stock ? Number(stock.qty) : 0;
+                                            const reqQty = Number(ing.reqQty);
+                                            
+                                            if (!stock || stockQty < reqQty) {
+                                                canCook = false;
+                                                missingCount++;
+                                            }
                                         }
-                                    }
-                                });
+                                    });
 
-                                return (
-                                    <div key={menu.id} className="bg-white p-5 rounded-2xl shadow-sm">
-                                        <div className="flex justify-between items-start mb-4">
-                                            <div>
-                                                <h3 className="font-bold text-xl">{menu.name}</h3>
-                                                {lastCooked && (
-                                                    <div className="flex items-center gap-1 mt-1 animate-fade-in">
-                                                        {isToday ? (
-                                                            <>
-                                                                <i data-lucide="check-circle-2" className="w-4 h-4 text-blue-500"></i>
-                                                                <span className="text-xs font-bold text-blue-500">Prepared Today</span>
-                                                            </>
-                                                        ) : (
-                                                            <span className="text-xs text-gray-400 font-medium">Last: {lastCooked.toLocaleDateString()}</span>
-                                                        )}
-                                                    </div>
-                                                )}
+                                    return (
+                                        <div key={menu.id} className="bg-white p-5 rounded-2xl shadow-sm">
+                                            <div className="flex justify-between items-start mb-4">
+                                                <div>
+                                                    <h3 className="font-bold text-xl">{menu.name}</h3>
+                                                    {lastCooked && (
+                                                        <div className="flex items-center gap-1 mt-1 animate-fade-in">
+                                                            {isToday ? (
+                                                                <>
+                                                                    <i data-lucide="check-circle-2" className="w-4 h-4 text-blue-500"></i>
+                                                                    <span className="text-xs font-bold text-blue-500">Prepared Today</span>
+                                                                </>
+                                                            ) : (
+                                                                <span className="text-xs text-gray-400 font-medium">Last: {lastCooked.toLocaleDateString()}</span>
+                                                            )}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                                <span className={`text-xs font-bold px-2 py-1 rounded-full ${canCook ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'}`}>
+                                                    {canCook ? 'Ready' : `${missingCount} Missing`}
+                                                </span>
                                             </div>
-                                            <span className={`text-xs font-bold px-2 py-1 rounded-full ${canCook ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'}`}>
-                                                {canCook ? 'Ready' : `${missingCount} Missing`}
-                                            </span>
-                                        </div>
-                                        
-                                        <div className="space-y-2 mb-5">
-                                            {menu.ingredients.map(ing => {
-                                                const stock = inventory.find(i => i.id === ing.id);
-                                                const stockQty = stock ? Number(stock.qty) : 0;
-                                                const reqQty = Number(ing.reqQty);
-                                                const hasEnough = !ing.trackQuantity || (stock && stockQty >= reqQty);
-                                                
-                                                return (
-                                                    <div key={ing.id} className="flex justify-between text-sm">
-                                                        <span className="text-gray-600">{ing.name}</span>
-                                                        <span className={hasEnough ? 'text-gray-400' : 'text-red-500 font-bold'}>
-                                                            {ing.trackQuantity ? `${reqQty} ${ing.unit}` : 'Manual'}
-                                                        </span>
-                                                    </div>
-                                                );
-                                            })}
-                                        </div>
+                                            
+                                            <div className="space-y-2 mb-5">
+                                                {menu.ingredients.map(ing => {
+                                                    const stock = inventory.find(i => i.id === ing.id);
+                                                    const stockQty = stock ? Number(stock.qty) : 0;
+                                                    const reqQty = Number(ing.reqQty);
+                                                    const hasEnough = !ing.trackQuantity || (stock && stockQty >= reqQty);
+                                                    
+                                                    return (
+                                                        <div key={ing.id} className="flex justify-between text-sm">
+                                                            <span className="text-gray-600">{ing.name}</span>
+                                                            <span className={hasEnough ? 'text-gray-400' : 'text-red-500 font-bold'}>
+                                                                {ing.trackQuantity ? `${reqQty} ${ing.unit}` : 'Manual'}
+                                                            </span>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
 
-                                        <button 
-                                            onClick={() => initiateCook(menu)}
-                                            disabled={!canCook || isProcessing}
-                                            className={`w-full py-3 rounded-xl font-bold transition-all active-scale ${canCook ? 'bg-blue-500 text-white shadow-lg shadow-blue-200' : 'bg-gray-100 text-gray-400 cursor-not-allowed'}`}
-                                        >
-                                            {canCook ? 'Proceed' : 'Not Enough Supplies'}
-                                        </button>
-                                    </div>
-                                );
-                            })}
+                                            <button 
+                                                onClick={() => initiateCook(menu)}
+                                                disabled={!canCook || isProcessing}
+                                                className={`w-full py-3 rounded-xl font-bold transition-all active-scale ${canCook ? 'bg-blue-500 text-white shadow-lg shadow-blue-200' : 'bg-gray-100 text-gray-400 cursor-not-allowed'}`}
+                                            >
+                                                {canCook ? 'Proceed' : 'Not Enough Supplies'}
+                                            </button>
+                                        </div>
+                                    );
+                                })}
+                            </div>
                         </div>
 
                         {/* Confirmation Modal */}
@@ -815,8 +821,9 @@
             };
 
             return (
-                <div className="flex-1 flex flex-col h-full bg-[#F2F2F7]">
-                    <div className="flex-1 overflow-y-auto no-scrollbar">
+                <div className="flex-1 flex flex-col h-full bg-[#F2F2F7] overflow-hidden">
+                    {/* View Container - Handles View Switching */}
+                    <div className="flex-1 relative overflow-hidden w-full h-full">
                         {view === 'inventory' && <InventoryView />}
                         {view === 'menu' && <MenuView />}
                         {view === 'cook' && <CookView />}
